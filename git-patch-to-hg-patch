@@ -22,10 +22,12 @@ import fileinput
 import email, email.parser, email.header, email.utils
 import math
 import argparse
+import hashlib
 from cStringIO import StringIO
 from itertools import takewhile
 
 keep_headers = False
+add_sha1 = False
 
 def decode_header(hdr_string):
   r"""Clean up weird encoding crap.
@@ -92,15 +94,25 @@ def process(git_patch_file):
   # nonsense once the git specific items have been stripped
   patch_body = re.sub(r'--\s?\n[0-9\.]+\n$', '', patch_body)
 
+  sha1 = hashlib.sha1()
+
   lines=[]
   if keep_headers:
       for h in msg.keys():
-        lines.append("%s: %s" % (h, msg[h]))
+	line = "%s: %s" % (h, msg[h])
+        lines.append(line)
+	sha1.update(line)
       lines.append("")
+
+  sha1.update(commit_title)
+  sha1.update(patch_body)
 
   lines += ['# HG changeset patch',
             '# User %s <%s>' % parsed_from,
-            '',
+            ]
+  if add_node_id:
+    lines += ['# Fake Node ID %s' % sha1.hexdigest()]
+  lines += ['',
             commit_title,
             '',
             patch_body]
@@ -113,11 +125,14 @@ if __name__ == "__main__":
                       help="Run test and exit")
   parser.add_argument("-k", "--keep-headers", action="store_true",
                       help="Preserve email headers")
+  parser.add_argument("-n", "--add-node-id", action="store_true",
+                      help="Add a fake Node ID to patch metadata")
   parser.add_argument("args", metavar="arg", nargs='*',
                       help="Names of patch files (if none, use stdio)")
   options = parser.parse_args()
 
   keep_headers = options.keep_headers
+  add_node_id = options.add_node_id
 
   if options.test:
     import doctest
